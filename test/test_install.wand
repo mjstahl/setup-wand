@@ -19,7 +19,7 @@ test "wand is on PATH" (fn t -> t.eq "3 : Int" (String.trim $(wand e "1 + 2")))
    workflow requested, passed in rather than assumed. *)
 test "the binary reports the version that was installed" (fn t ->
   let want = String.trim $(printenv EXPECTED_VERSION) in
-  t.eq "wand ${want}" (String.trim $(wand --version)))
+  t.eq "wand %{want}" (String.trim $(wand --version)))
 
 (* ── The standard library came with it ─────────────────────────────────── *)
 
@@ -42,7 +42,7 @@ test "a decoy stdlib/ changes nothing" (fn t ->
         (Path.join d (Path.of_string "stdlib/List.wand"))
         "let length x = \"hijacked\"\n"
     in
-    t.eq "2 : Int" (String.trim $(cd ${d} && wand e "List.length [1,2]")))
+    t.eq "2 : Int" (String.trim $(cd %{d} && wand e "List.length [1,2]")))
 
 (* ── Typechecking, which is why a workflow installs this at all ────────── *)
 
@@ -50,11 +50,11 @@ test "wand t reports a type without running anything" (fn t ->
   with FS.temp_dir "setup_wand_ok_" as d ->
     let script = Path.join d (Path.of_string "ok.wand") in
     let () = FS.write_file! script "import List\nlet n = List.length [1,2,3]\nn\n" in
-    t.eq true (String.contains? "Int" $(wand t --file ${script})))
+    t.eq true (String.contains? "Int" $(wand t --file %{script})))
 
 test "a type error is reported, not run" (fn t ->
   with FS.temp_dir "setup_wand_bad_" as d ->
     let script = Path.join d (Path.of_string "bad.wand") in
     let () = FS.write_file! script "let n : Int = \"not an int\"\nn\n" in
-    let r = $?(wand t --file ${script}) in
-    t.eq true (String.contains? "type error" "${r.stdout}${r.stderr}"))
+    let r = $?(wand t --file %{script}) in
+    t.eq true (String.contains? "type error" "%{r.stdout}%{r.stderr}"))
