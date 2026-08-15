@@ -46,8 +46,33 @@ jobs:
           version: 0.1.0
 
       - name: A pinned version installs that version
+        id: check-pinned
         run: |
           set -euo pipefail
           got='${{ steps.pinned.outputs.version }}'
           test "$got" = "0.1.0" || { echo "expected 0.1.0, got '$got'" >&2; exit 1; }
           wand e '1 + 2'
+
+  # The jobs above test the action in this checkout. This one tests it the
+  # way everyone else will: by the tag, resolved from GitHub, with no
+  # checkout of this repository at all. It is the acceptance criterion --
+  # a workflow that says `uses: mjstahl/setup-wand@v1` can run `wand test`.
+  consumer:
+    name: as a consumer pins it
+    runs-on: ubuntu-latest
+    steps:
+      - uses: mjstahl/setup-wand@v1
+
+      - name: Run a wand script with nothing else installed
+        run: |
+          set -euo pipefail
+          wand --version
+          mkdir -p /tmp/consumer && cd /tmp/consumer
+          cat > test_greeting.wand <<'WAND'
+          let [test] = import Test
+          import String
+
+          test "wand runs in a workflow that only pinned an action" (fn t ->
+            t.eq "HELLO" (String.upper "hello"))
+          WAND
+          wand test .
