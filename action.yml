@@ -1,0 +1,110 @@
+name: Setup wand
+description: Install a released wand binary and put it on PATH.
+branding:
+  icon: terminal
+  color: purple
+
+inputs:
+  version:
+    description: 'Version to install: a number like 0.1.0, or "latest".'
+    required: false
+    default: latest
+  token:
+    description: Token used to resolve "latest" through the GitHub API.
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  version:
+    description: The version actually installed, without the leading v.
+    value: ${{ steps.install.outputs.version }}
+  path:
+    description: Directory the binary was installed into.
+    value: ${{ steps.install.outputs.path }}
+
+runs:
+  using: composite
+  steps:
+    - id: install
+      shell: bash
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+        GH_TOKEN: ${{ inputs.token }}
+      run: |
+        set -euo pipefail
+
+        repo=mjstahl/wand
+
+        # The runner tells us what it is; the release names match. Anything
+        # else is a platform wand does not publish for, and saying so beats
+        # downloading a 404 and failing on a corrupt archive.
+        case "$(uname -s)" in
+          Linux)  os=linux ;;
+          Darwin) os=macos ;;
+          *) echo "::error::setup-wand does not support $(uname -s)" >&2; exit 1 ;;
+        esac
+        case "$(uname -m)" in
+          x86_64|amd64)  arch=x86_64 ;;
+          arm64|aarch64) arch=aarch64 ;;
+          *) echo "::error::setup-wand does not support $(uname -m)" >&2; exit 1 ;;
+        esac
+        target="$os-$arch"
+
+        # Asset names carry the version, so "latest" has to become a number
+        # before anything can be fetched.
+        version="${INPUT_VERSION#v}"
+        if [ "$version" = "latest" ]; then
+          version=$(gh api "repos/$repo/releases/latest" --jq .tag_name)
+          version="${version#v}"
+        fi
+
+        name="wand-$version-$target"
+        base="https://github.com/$repo/releases/download/v$version"
+        dir="$RUNNER_TOOL_CACHE/wand/$version/$target"
+
+        if [ -x "$dir/wand" ]; then
+          echo "wand $version ($target) is already in the tool cache"
+        else
+          tmp=$(mktemp -d)
+          echo "downloading $name.tar.gz"
+          curl -fsSL --retry 3 -o "$tmp/$name.tar.gz" "$base/$name.tar.gz"
+          curl -fsSL --retry 3 -o "$tmp/$name.tar.gz.sha256" "$base/$name.tar.gz.sha256"
+          # The release ships checksums; an action that ignores them is
+          # asking every user to trust a network it cannot see.
+          (cd "$tmp" && shasum -a 256 -c "$name.tar.gz.sha256")
+          mkdir -p "$dir"
+          tar -xzf "$tmp/$name.tar.gz" -C "$tmp"
+          mv "$tmp/$name/wand" "$dir/wand"
+          chmod +x "$dir/wand"
+          rm -rf "$tmp"
+        fi
+
+        echo "$dir" >> "$GITHUB_PATH"
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+        echo "path=$dir" >> "$GITHUB_OUTPUT"
+
+        # Proves the binary runs on this machine before any workflow step
+        # depends on it, and does it from a directory that is not a wand
+        # tree -- which is the whole claim the binary makes.
+        cd "$RUNNER_TEMP"
+        got=$("$dir/wand" e '1 + 2')
+        if [ "$got" != "3 : Int" ]; then
+          echo "::error::installed wand did not run: expected '3 : Int', got '$got'" >&2
+          exit 1
+        fi
+
+        # And that it is the version asked for, according to the binary
+        # rather than to the name of the file it came out of. Releases from
+        # 0.1.1 on report this; older ones do not, and are taken at their
+        # word rather than failing for being old.
+        reported=$("$dir/wand" --version 2>/dev/null || true)
+        case "$reported" in
+          "wand $version") ;;
+          "") echo "note: wand $version predates --version; not verified" ;;
+          *)
+            echo "::error::asked for wand $version, binary reports '$reported'" >&2
+            exit 1
+            ;;
+        esac
+
+        echo "wand $version ($target) installed at $dir"

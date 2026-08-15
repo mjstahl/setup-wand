@@ -1,0 +1,53 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  install:
+    name: ${{ matrix.runs-on }}
+    runs-on: ${{ matrix.runs-on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # The three platforms wand publishes and GitHub schedules. macOS
+        # x86_64 is absent because its runner does not leave the queue; that
+        # archive is built by hand and the action installs it the same way.
+        runs-on: [ubuntu-latest, ubuntu-24.04-arm, macos-15]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./
+        id: setup
+
+      - name: Report what was installed
+        run: |
+          echo "version: ${{ steps.setup.outputs.version }}"
+          echo "path:    ${{ steps.setup.outputs.path }}"
+          command -v wand
+
+      # The acceptance criterion, run rather than asserted: a workflow that
+      # used this action can run `wand test`. The suite it runs is written in
+      # wand, so this step is also the first wand script in anyone's CI.
+      - name: wand test
+        run: wand test test
+        env:
+          EXPECTED_VERSION: ${{ steps.setup.outputs.version }}
+
+      # `latest` resolves through the API; a pinned number must not. Run
+      # second, so the tool-cache hit path is exercised too.
+      - uses: ./
+        id: pinned
+        with:
+          version: 0.1.0
+
+      - name: A pinned version installs that version
+        run: |
+          set -euo pipefail
+          got='${{ steps.pinned.outputs.version }}'
+          test "$got" = "0.1.0" || { echo "expected 0.1.0, got '$got'" >&2; exit 1; }
+          wand e '1 + 2'
