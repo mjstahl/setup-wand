@@ -94,13 +94,14 @@ runs:
         fi
 
         # And that it is the version asked for, according to the binary
-        # rather than to the name of the file it came out of. Releases from
-        # 0.1.1 on report this; older ones do not, and are taken at their
-        # word rather than failing for being old.
-        reported=$("$dir/wand" --version 2>/dev/null || true)
+        # rather than to the name of the file it came out of. `wand version`
+        # is the spelling from 0.12.0 on and `--version` the one before it,
+        # so both are asked; releases before 0.1.1 report neither, and are
+        # taken at their word rather than failing for being old.
+        reported=$("$dir/wand" version 2>/dev/null || "$dir/wand" --version 2>/dev/null || true)
         case "$reported" in
           "wand $version") ;;
-          "") echo "note: wand $version predates --version; not verified" ;;
+          "") echo "note: wand $version predates the version command; not verified" ;;
           *)
             echo "::error::asked for wand $version, binary reports '$reported'" >&2
             exit 1

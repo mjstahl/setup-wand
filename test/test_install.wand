@@ -19,7 +19,7 @@ test "wand is on PATH" (fn t -> t.eq "3 : Int" (String.trim $(wand e "1 + 2")))
    workflow requested, passed in rather than assumed. *)
 test "the binary reports the version that was installed" (fn t ->
   let want = String.trim $(printenv EXPECTED_VERSION) in
-  t.eq "wand %{want}" (String.trim $(wand --version)))
+  t.eq "wand %{want}" (String.trim $(wand version)))
 
 (* ── The standard library came with it ─────────────────────────────────── *)
 
