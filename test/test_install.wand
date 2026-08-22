@@ -1,27 +1,27 @@
-uses {Shell, FS.Read, FS.Write}
+uses {FS.Read, FS.Write, Shell}
 
 let {test} = import Test
 import FS
 import Path
 import String
 
-(* What a workflow gets after `uses: mjstahl/setup-wand@v1`, checked by
-   running it rather than by trusting that a download succeeded. The action's
-   own acceptance test, written in wand, because a tool that installs a
-   scripting language should be able to show the language doing the work. *)
+-- What a workflow gets after `uses: mjstahl/setup-wand@v1`, checked by
+-- running it rather than by trusting that a download succeeded. The action's
+-- own acceptance test, written in wand, because a tool that installs a
+-- scripting language should be able to show the language doing the work.
 
-(* ── The binary is on PATH and works ───────────────────────────────────── *)
+-- ── The binary is on PATH and works ─────────────────────────────────────
 
 test "wand is on PATH" (fn t -> t.eq "3 : Int" (String.trim $(wand e "1 + 2")))
 
-(* The binary states its own version, which is what lets the action check
-   that it installed what it was asked for. Compared against the version the
-   workflow requested, passed in rather than assumed. *)
+-- The binary states its own version, which is what lets the action check
+-- that it installed what it was asked for. Compared against the version the
+-- workflow requested, passed in rather than assumed.
 test "the binary reports the version that was installed" (fn t ->
   let want = String.trim $(printenv EXPECTED_VERSION) in
   t.eq "wand %{want}" (String.trim $(wand version)))
 
-(* ── The standard library came with it ─────────────────────────────────── *)
+-- ── The standard library came with it ───────────────────────────────────
 
 test "stdlib is embedded" (fn t ->
   t.eq "2 : Int" (String.trim $(wand e "List.length [1,2]")))
@@ -29,32 +29,32 @@ test "stdlib is embedded" (fn t ->
 test "more than one module loads" (fn t ->
   t.eq "SHIPPED : String" (String.trim $(wand e "String.upper \"shipped\"")))
 
-(* ── The claim the release actually makes ──────────────────────────────── *)
+-- ── The claim the release actually makes ────────────────────────────────
 
-(* A `stdlib/` directory beside the working directory used to *be* the
-   standard library. An installed binary has no tree to walk, and this is
-   where a regression would show up first. *)
+-- A `stdlib/` directory beside the working directory used to *be* the
+-- standard library. An installed binary has no tree to walk, and this is
+-- where a regression would show up first.
 test "a decoy stdlib/ changes nothing" (fn t ->
   with FS.temp_dir "setup_wand_decoy_" as d ->
-    let () = FS.mkdir! (Path.join d (Path.of_string "stdlib")) in
-    let () =
-      FS.write_file!
-        (Path.join d (Path.of_string "stdlib/List.wand"))
-        "let length x = \"hijacked\"\n"
-    in
-    t.eq "2 : Int" (String.trim $(cd %{d} && wand e "List.length [1,2]")))
+  let () = FS.mkdir! (Path.join d (Path.of_string "stdlib")) in
+  let () =
+    (FS.write_file!
+      (Path.join d (Path.of_string "stdlib/List.wand"))
+      "let length x = \"hijacked\"\n")
+  in
+  t.eq "2 : Int" (String.trim $(cd %{d} && wand e "List.length [1,2]")))
 
-(* ── Typechecking, which is why a workflow installs this at all ────────── *)
+-- ── Typechecking, which is why a workflow installs this at all ──────────
 
 test "wand t reports a type without running anything" (fn t ->
   with FS.temp_dir "setup_wand_ok_" as d ->
-    let script = Path.join d (Path.of_string "ok.wand") in
-    let () = FS.write_file! script "import List\nlet n = List.length [1,2,3]\nn\n" in
-    t.eq true (String.contains? "Int" $(wand t --file %{script})))
+  let script = Path.join d (Path.of_string "ok.wand") in
+  let () = FS.write_file! script "import List\nlet n = List.length [1,2,3]\nn\n" in
+  t.eq true (String.contains? "Int" $(wand t --file %{script})))
 
 test "a type error is reported, not run" (fn t ->
   with FS.temp_dir "setup_wand_bad_" as d ->
-    let script = Path.join d (Path.of_string "bad.wand") in
-    let () = FS.write_file! script "let n : Int = \"not an int\"\nn\n" in
-    let r = $?(wand t --file %{script}) in
-    t.eq true (String.contains? "type error" "%{r.stdout}%{r.stderr}"))
+  let script = Path.join d (Path.of_string "bad.wand") in
+  let () = FS.write_file! script "let n : Int = \"not an int\"\nn\n" in
+  let r = $?(wand t --file %{script}) in
+  t.eq true (String.contains? "type error" "%{r.stdout}%{r.stderr}"))
